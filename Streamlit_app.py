@@ -6,8 +6,16 @@ import nltk
 from nltk.corpus import stopwords
 import PyPDF2  # For PDF parsing
 
-nltk.download('punkt')
-nltk.download('stopwords')
+
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords')
 
 # Load models
 le = pickle.load(open('label_encoder.pkl', 'rb'))
