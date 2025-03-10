@@ -1,3 +1,5 @@
+# -*- python3.10 -*-
+
 # Updated app.py (Improved)
 import streamlit as st
 import pickle
