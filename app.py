@@ -1,76 +1,79 @@
-# -*- python3.10 -*-
-
-# Updated app.py (Improved)
 import streamlit as st
 import pickle
 import re
 import nltk
-from nltk.corpus import stopwords
-import PyPDF2  # For PDF parsing
+import numpy as np
 
+nltk.download('punkt')
+nltk.download('stopwords')
 
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
-
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords')
-
-# Load models
-le = pickle.load(open('label_encoder.pkl', 'rb'))
-tfidf = pickle.load(open('tfidf.pkl', 'rb'))
-clf = pickle.load(open('clf.pkl', 'rb'))
+# Load models (FIXED loading code)
+with open('clf.pkl', 'rb') as f:
+    clf = pickle.load(f)
+    
+with open('tfidf.pkl', 'rb') as f:
+    tfidf = pickle.load(f)
 
 def cleanResume(txt):
-    # Same cleaning function as the ML model
     cleanText = re.sub(r'http\S+\s', ' ', txt)
     cleanText = re.sub(r'RT|cc', ' ', cleanText)
     cleanText = re.sub(r'#\S+\s', ' ', cleanText)
     cleanText = re.sub(r'@\S+', '  ', cleanText)  
     cleanText = re.sub(r'[%s]' % re.escape("""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""), ' ', cleanText)
-    cleanText = re.sub(r'[^\x00-\x7f]', ' ', cleanText) 
+    cleanText = re.sub(r'[^\x00-\x7f]', ' ', cleanText)
     cleanText = re.sub(r'\s+', ' ', cleanText)
     return cleanText
 
-def extract_text_from_pdf(uploaded_file):
-    reader = PyPDF2.PdfReader(uploaded_file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text()
-    return text
+def get_top_skills(resume_text, tfidf_vectorizer, n=5):
+    # Transform cleaned resume
+    transformed_text = tfidf_vectorizer.transform([resume_text])
+    
+    # Get feature names and scores
+    feature_array = np.array(tfidf_vectorizer.get_feature_names_out())
+    tfidf_scores = transformed_text.toarray().flatten()
+    
+    # Sort scores in descending order
+    sorted_indices = tfidf_scores.argsort()[::-1]
+    top_skills = feature_array[sorted_indices][:n]
+    
+    return list(top_skills)
 
 def main():
     st.title("Resume Screening App")
-    st.markdown("Upload your resume (PDF or TXT)")
-
-    uploaded_file = st.file_uploader("Choose a file", type=["txt", "pdf", "docs"])
+    uploaded_file = st.file_uploader('Upload Resume', type=['txt', 'pdf'])  # Fixed variable name
     
-    if uploaded_file:
+    if uploaded_file is not None:
         try:
-            if uploaded_file.type == "application/pdf":
-                resume_text = extract_text_from_pdf(uploaded_file)
-            else:
-                resume_text = uploaded_file.read().decode('utf-8')
-            
-            cleaned_resume = cleanResume(resume_text)
-            
-            # Prediction
-            input_features = tfidf.transform([cleaned_resume])
-            prediction_id = clf.predict(input_features)[0]
-            category = le.inverse_transform([prediction_id])[0]
-            
-            # Display
-            st.subheader("Predicted Category:")
-            st.success(category)
-            st.markdown("---")
-            st.subheader("Cleaned Resume Text:")
-            st.text(cleaned_resume[:500] + "...")  # Show sample text
-            
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
+            resume_bytes = uploaded_file.read()
+            resume_text = resume_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            resume_text = resume_bytes.decode('latin-1')
+        
+        cleaned_resume = cleanResume(resume_text)  # Fixed variable name
+        input_features = tfidf.transform([cleaned_resume])
+        
+        # Prediction
+        prediction_id = clf.predict(input_features)[0]
+        
+        # Get top skills
+        top_skills = get_top_skills(cleaned_resume, tfidf)
+        
+        # Display results
+        category_mapping = {
+            6: "Data Science", 12: "HR", 0: "Advocate", 1: "Arts", 24: "Web Designing",
+            16: "Mechanical Engineer", 22: "Sales", 14: "Health and fitness", 5: "Civil Engineer",
+            15: "Java Developer", 4: "Business Analyst", 21: "SAP Developer", 2: "Automation Testing",
+            11: "Electrical Engineering", 18: "Operations Manager", 20: "Python Developer",
+            8: "DevOps Engineer", 17: "Network Security Engineer", 19: "PMO", 7: "Database",
+            13: "Hadoop", 10: "ETL Developer", 9: "DotNet Developer", 3: "Blockchain", 23: "Testing"
+        }
+        
+        category_name = category_mapping.get(prediction_id, "Unknown")
+        st.subheader("**Analysis Results**")
+        st.success(f"Predicted Category: {category_name}")
+        st.info(f"**Top 5 Relevant Skills:**\n{', '.join(top_skills)}")
+        st.write("\n**Why this category?**")
+        st.write("The model identified these key skills from your resume that are commonly associated with this job category. This simple analysis is based on word importance in your document.")
 
 if __name__ == '__main__':
     main()
