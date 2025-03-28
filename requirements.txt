@@ -1,6 +1,5 @@
-streamlit
+flask
 scikit-learn
-numpy
 pandas
-nltk
-python-dotenv
+numpy
+pdfminer.six

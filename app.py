@@ -1,79 +1,79 @@
-import streamlit as st
-import pickle
+from flask import Flask, request, render_template
 import re
-import nltk
-import numpy as np
+import pickle
+from pdfminer.high_level import extract_text
 
-nltk.download('punkt')
-nltk.download('stopwords')
+app = Flask(__name__)
 
-# Load models (FIXED loading code)
-with open('clf.pkl', 'rb') as f:
-    clf = pickle.load(f)
-    
-with open('tfidf.pkl', 'rb') as f:
-    tfidf = pickle.load(f)
+# Load your pre-trained files
+le = pickle.load(open('label_encoder.pkl', 'rb'))
+tfidf = pickle.load(open('tfidf.pkl', 'rb'))
+clf = pickle.load(open('clf.pkl', 'rb'))
 
-def cleanResume(txt):
-    cleanText = re.sub(r'http\S+\s', ' ', txt)
-    cleanText = re.sub(r'RT|cc', ' ', cleanText)
-    cleanText = re.sub(r'#\S+\s', ' ', cleanText)
-    cleanText = re.sub(r'@\S+', '  ', cleanText)  
-    cleanText = re.sub(r'[%s]' % re.escape("""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""), ' ', cleanText)
-    cleanText = re.sub(r'[^\x00-\x7f]', ' ', cleanText)
-    cleanText = re.sub(r'\s+', ' ', cleanText)
-    return cleanText
+# Clean resume text (from your code)
+def clean_resume(txt):
+    clean_text = re.sub(r'http\S+\s', ' ', txt)
+    clean_text = re.sub(r'RT|cc', ' ', clean_text)
+    clean_text = re.sub(r'#\S+\s', ' ', clean_text)
+    clean_text = re.sub(r'@\S+', '  ', clean_text)  
+    clean_text = re.sub(r'[%s]' % re.escape("""!"#$%&'()*+,-./:;<=>?@[\]^_`{|}~"""), ' ', clean_text)
+    clean_text = re.sub(r'[^\x00-\x7f]', ' ', clean_text) 
+    clean_text = re.sub(r'\s+', ' ', clean_text)
+    return clean_text
 
-def get_top_skills(resume_text, tfidf_vectorizer, n=5):
-    # Transform cleaned resume
-    transformed_text = tfidf_vectorizer.transform([resume_text])
-    
-    # Get feature names and scores
-    feature_array = np.array(tfidf_vectorizer.get_feature_names_out())
-    tfidf_scores = transformed_text.toarray().flatten()
-    
-    # Sort scores in descending order
-    sorted_indices = tfidf_scores.argsort()[::-1]
-    top_skills = feature_array[sorted_indices][:n]
-    
-    return list(top_skills)
+# Skills mapping (YOU MUST COMPLETE THIS!)
+skills_mapping = {
+    "Data Science": ["Python / R", "Machine Learning & AI", "Data Visualization", "SQL & NoSQL Databases", "Statistical Analysis"],
+    "HR": ["Recruitment & Talent Acquisition", "Employee Relations", "HR Software", "Performance Management", "Labor Laws & Compliance"],
+    "Advocate": ["Legal Research & Writing", "Contract & Negotiation", "Courtroom Advocacy", "Case Analysis & Strategy", "Legal Regulations"],
+    "Arts": ["Creativity & Design Thinking", "Drawing / Painting / Sculpture", "Digital Art & Graphic Design", "Art History & Theory", "Portfolio Development"],
+    "Web Designing": ["HTML, CSS, JavaScript", "UI/UX Design", "Responsive Web Design", "Graphic Design Tools", "WordPress / CMS"],
+    "Mechanical Engineer": ["CAD Software", "Thermodynamics", "Material Science", "Manufacturing Processes", "Problem-Solving"],
+    "Sales": ["CRM", "Negotiation & Persuasion", "Market Research", "Communication", "Lead Generation"],
+    "Health and Fitness": ["Nutrition & Diet Planning", "Personal Training", "Anatomy & Physiology", "Coaching & Motivation", "CPR & First Aid"],
+    "Civil Engineer": ["Structural Analysis", "AutoCAD & Civil 3D", "Project Management", "Geotechnical Skills", "Building Codes"],
+    "Java Developer": ["Core Java", "Spring Boot & Hibernate", "RESTful APIs", "Database Management", "Multithreading"],
+    "Business Analyst": ["Requirement Gathering", "Data Analysis", "Process Mapping", "Stakeholder Communication", "BI Tools"],
+    "SAP Developer": ["SAP ABAP", "SAP Fiori", "SAP Modules", "Integration", "Debugging"],
+    "Automation Testing": ["Selenium", "TestNG / JUnit", "CI/CD", "API Testing", "Scripting Languages"],
+    "Electrical Engineering": ["Circuit Design", "Embedded Systems", "Power Systems", "MATLAB", "PLC & SCADA"],
+    "Operations Manager": ["Supply Chain", "Process Optimization", "Budgeting", "Team Management", "Risk Management"],
+    "Python Developer": ["Python", "Django / Flask", "Data Structures", "RESTful APIs", "Databases"],
+    "DevOps Engineer": ["CI/CD", "Cloud Platforms", "Docker & Kubernetes", "Infrastructure as Code", "Monitoring & Logging"],
+    "Network Security Engineer": ["Network Protocols", "Cybersecurity", "VPNs & IDS", "SIEM Tools", "Risk Assessment"],
+    "PMO": ["Project Planning", "Agile & Scrum", "Risk Management", "Budgeting", "Stakeholder Communication"],
+    "Database": ["SQL & NoSQL", "Performance Tuning", "Backup & Recovery", "Data Security", "Cloud Databases"],
+    "Hadoop": ["Hadoop Ecosystem", "Apache Spark", "Big Data Processing", "NoSQL Databases", "Python / Scala"],
+    "ETL Developer": ["ETL Tools", "Data Warehousing", "SQL & Scripting", "Performance Tuning", "Cloud ETL"],
+    "DotNet Developer": ["C# & .NET Core", "ASP.NET MVC", "Entity Framework", "Frontend Technologies", "Azure Services"],
+    "Blockchain": ["Smart Contracts", "Blockchain Frameworks", "Cryptography", "Consensus Mechanisms", "Web3 & dApps"],
+    "Testing": ["Manual Testing", "Automation Testing", "Performance Testing", "API Testing", "Bug Tracking"]
+}
 
-def main():
-    st.title("Resume Screening App")
-    uploaded_file = st.file_uploader('Upload Resume', type=['txt', 'pdf'])  # Fixed variable name
-    
-    if uploaded_file is not None:
-        try:
-            resume_bytes = uploaded_file.read()
-            resume_text = resume_bytes.decode('utf-8')
-        except UnicodeDecodeError:
-            resume_text = resume_bytes.decode('latin-1')
-        
-        cleaned_resume = cleanResume(resume_text)  # Fixed variable name
-        input_features = tfidf.transform([cleaned_resume])
-        
-        # Prediction
-        prediction_id = clf.predict(input_features)[0]
-        
-        # Get top skills
-        top_skills = get_top_skills(cleaned_resume, tfidf)
-        
-        # Display results
-        category_mapping = {
-            6: "Data Science", 12: "HR", 0: "Advocate", 1: "Arts", 24: "Web Designing",
-            16: "Mechanical Engineer", 22: "Sales", 14: "Health and fitness", 5: "Civil Engineer",
-            15: "Java Developer", 4: "Business Analyst", 21: "SAP Developer", 2: "Automation Testing",
-            11: "Electrical Engineering", 18: "Operations Manager", 20: "Python Developer",
-            8: "DevOps Engineer", 17: "Network Security Engineer", 19: "PMO", 7: "Database",
-            13: "Hadoop", 10: "ETL Developer", 9: "DotNet Developer", 3: "Blockchain", 23: "Testing"
-        }
-        
-        category_name = category_mapping.get(prediction_id, "Unknown")
-        st.subheader("**Analysis Results**")
-        st.success(f"Predicted Category: {category_name}")
-        st.info(f"**Top 5 Relevant Skills:**\n{', '.join(top_skills)}")
-        st.write("\n**Why this category?**")
-        st.write("The model identified these key skills from your resume that are commonly associated with this job category. This simple analysis is based on word importance in your document.")
+
+@app.route('/', methods=['GET', 'POST'])
+def upload_file():
+    if request.method == 'POST':
+        file = request.files['file']
+        if file:
+            # Extract text from PDF or TXT
+            if file.filename.endswith('.pdf'):
+                text = extract_text(file)
+            else:
+                text = file.read().decode('utf-8')
+            
+            # Clean and predict
+            cleaned_text = clean_resume(text)
+            features = tfidf.transform([cleaned_text])
+            pred_id = clf.predict(features)[0]
+            category = le.inverse_transform([pred_id])[0]
+            
+            # Get skills (default to empty list if category missing)
+            skills = skills_mapping.get(category, [])
+            return render_template('index.html', 
+                                   category=category, 
+                                   skills=skills[:5])  # Show top 5 skills
+    return render_template('index.html')
 
 if __name__ == '__main__':
-    main()
+    app.run(debug=True)
